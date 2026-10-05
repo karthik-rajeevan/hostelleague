@@ -513,10 +513,160 @@
             border-radius: 4px;
             margin-left: 6px;
         }
+        /* Loading Overlay & Pull to Refresh Styles */
+        #app-loader {
+            position: fixed;
+            inset: 0;
+            background: #050505;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.4s;
+            /* Failsafe: pure-CSS auto-dismiss so the splash can NEVER permanently block
+               the app, even if the script throws before it can register (e.g. localStorage
+               access denied). JS normally removes this long before 2.5s. */
+            animation: loader-failsafe 0.4s ease 2.5s forwards;
+        }
+
+        #app-loader.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .spinner-ring {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: 3px solid rgba(0, 217, 95, 0.15);
+            border-top-color: var(--ac);
+            border-right-color: var(--ac);
+            animation: spin 0.8s linear infinite;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 25px rgba(0, 217, 95, 0.25);
+        }
+
+        .loader-icon {
+            width: 24px;
+            height: 24px;
+            animation: pulse-ball 1.2s ease-in-out infinite alternate;
+        }
+
+        .loader-title {
+            font-size: 16px;
+            font-weight: 800;
+            letter-spacing: -0.3px;
+            color: var(--tx);
+        }
+
+        .loader-title span {
+            color: var(--ac);
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes pulse-ball {
+            from { transform: scale(0.85); opacity: 0.7; }
+            to { transform: scale(1.15); opacity: 1; }
+        }
+
+        @keyframes loader-failsafe {
+            to { opacity: 0; visibility: hidden; pointer-events: none }
+        }
+
+        /* Top Progress Bar */
+        #top-bar {
+            position: fixed;
+            top: 0;
+            /* Left edge of the centred 520px column (matches nav) so the bar fills from the
+               start of the content, not from the viewport edge. */
+            left: max(0px, calc(50% - 260px));
+            height: 3px;
+            background: linear-gradient(90deg, var(--ac), #00ff88);
+            width: 0%;
+            max-width: 520px;
+            z-index: 10000;
+            transition: width 0.3s ease, opacity 0.3s ease;
+            box-shadow: 0 0 8px var(--ac);
+        }
+
+        /* Pull to Refresh Indicator */
+        #pull-indicator {
+            position: fixed;
+            top: calc(env(safe-area-inset-top) + 12px);
+            left: 50%;
+            transform: translateX(-50%) translateY(-60px);
+            background: var(--card2);
+            border: 1px solid rgba(0, 217, 95, 0.35);
+            border-radius: 30px;
+            padding: 8px 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 99;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+            transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.27), opacity 0.2s ease;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #pull-indicator.visible {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .pull-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(0, 217, 95, 0.2);
+            border-top-color: var(--ac);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        .pull-text {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--tx);
+            white-space: nowrap;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .spinner-ring, .pull-spinner, .loader-icon { animation: none }
+            #app-loader, #top-bar, #pull-indicator { transition-duration: 0.01ms }
+        }
     </style>
 </head>
 
 <body>
+    <!-- Top Progress Bar -->
+    <div id="top-bar"></div>
+
+    <!-- Pull to Refresh Banner -->
+    <div id="pull-indicator">
+        <div class="pull-spinner"></div>
+        <span class="pull-text">Updating league data...</span>
+    </div>
+
+    <!-- Loading Animation Overlay -->
+    <div id="app-loader">
+        <div class="spinner-ring">
+            <svg class="loader-icon" viewBox="0 0 24 24" fill="none" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"/>
+                <path d="M12 7l4 3-1.5 5h-5L8 10z"/>
+            </svg>
+        </div>
+        <div class="loader-title">Hostel <span>League</span></div>
+    </div>
+
     <header>
         <h1 id="ttl"></h1>
         <div class="sub" id="sub"></div>
@@ -794,7 +944,32 @@
             app.innerHTML = S.match != null ? views.match() : views[S.tab]()
         }
 
-        render();
+        /* ============ BOOT / SPLASH ============ */
+        const loader = $("#app-loader"), topbar = $("#top-bar");
+        const wait = ms => new Promise(r => setTimeout(r, ms));
+
+        function dismissLoader() {
+            loader.classList.add("hidden");
+            topbar.style.opacity = "0";
+            /* Drop the node once faded out so the infinite spin/pulse animations stop
+               instead of running for the rest of the session. */
+            setTimeout(() => loader.remove(), 450)
+        }
+
+        async function boot() {
+            try {
+                topbar.style.width = "30%";
+                render();
+                topbar.style.width = "75%";
+                await wait(260);
+                topbar.style.width = "100%";
+                await wait(300)
+            } finally {
+                dismissLoader()
+            }
+        }
+
+        boot().catch(e => console.error("[boot]", e));
     </script>
 </body>
 
