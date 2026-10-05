@@ -193,11 +193,21 @@
             font-size: 13px
         }
 
+        /* Crests keep their real silhouette instead of being clipped to a circle.
+           `--ar` is the logo's own aspect ratio, so the box hugs the badge and
+           `contain` fills it edge to edge - only the height is fixed. A round
+           crest needs no plate, so it gets a transparent `--cr-bg`; the rest sit
+           on black. The radius stays small so the plate never reads as a circle. */
         .cr {
             flex: none;
-            width: 28px;
             height: 28px;
-            border-radius: 50%;
+            aspect-ratio: var(--ar, 1);
+            background-color: var(--cr-bg, transparent);
+            background-image: var(--cr-img, none);
+            background-position: center;
+            background-size: contain;
+            background-repeat: no-repeat;
+            border-radius: var(--cr-r, 0px);
             display: grid;
             place-items: center;
             font-size: 10px;
@@ -207,7 +217,6 @@
         }
 
         .cr.l {
-            width: 64px;
             height: 64px;
             font-size: 20px
         }
@@ -709,9 +718,14 @@
         /* ============ LEAGUE DATA ============ */
         const LEAGUE = { name: "Hostel", accent: "League", season: "Season 2026/27", venue: "Hostel Ground" };
         
+        /* `ar` = the logo file's own width/height ratio (measured from the cropped
+           PNG), so `cr()` can size the box to the badge with no dead space.
+           `round` = true only for genuinely circular crests - those need no
+           plate behind them. Spurs is a tall cockerel, Palace an eagle, Forest a
+           tree, Villa/Fulham shields: all irregular, so all take the black plate. */
         const TEAMS = {
             SPR: {
-                name: "Spurs", c: "#2563eb", logo: "public/spurs.png", mgr: { name: "Hari", photo: "" },
+                name: "Spurs", c: "#2563eb", logo: "public/spurs.png", ar: 0.4836, round: false, mgr: { name: "Hari", photo: "" },
                 pl: [
                     ["Adithya (GK)", "GK", 1],
                     ["Famil", "DEF", 3],
@@ -725,7 +739,7 @@
                 ]
             },
             CRY: {
-                name: "Crystal Palace", c: "#dc2626", logo: "public/crystalpalace.png", mgr: { name: "Prayag", photo: "" },
+                name: "Crystal Palace", c: "#dc2626", logo: "public/crystalpalace.png", ar: 0.804, round: false, mgr: { name: "Prayag", photo: "" },
                 pl: [
                     ["Hrithesh (GK)", "GK", 1],
                     ["Dhruv", "DEF", 3],
@@ -739,7 +753,7 @@
                 ]
             },
             NFO: {
-                name: "Nottingham Forest", c: "#16a34a", logo: "public/nottinghamforest.png", mgr: { name: "Amal Jyothy", photo: "" },
+                name: "Nottingham Forest", c: "#16a34a", logo: "public/nottinghamforest.png", ar: 0.5708, round: false, mgr: { name: "Amal Jyothy", photo: "" },
                 pl: [
                     ["Mishal (GK)", "GK", 1],
                     ["Shammaz", "DEF", 3],
@@ -753,7 +767,7 @@
                 ]
             },
             FUL: {
-                name: "Fulham", c: "#eab308", logo: "public/fulham.png", mgr: { name: "Syam", photo: "" },
+                name: "Fulham", c: "#eab308", logo: "public/fulham.png", ar: 0.7507, round: false, mgr: { name: "Syam", photo: "" },
                 pl: [
                     ["Vaishnav (GK)", "GK", 1],
                     ["Rabeeh", "DEF", 3],
@@ -767,7 +781,7 @@
                 ]
             },
             BHA: {
-                name: "Brighton", c: "#0284c7", logo: "public/brighton.png", mgr: { name: "Anirudh", photo: "" },
+                name: "Brighton", c: "#0284c7", logo: "public/brighton.png", ar: 1, round: true, mgr: { name: "Anirudh", photo: "" },
                 pl: [
                     ["Adwaith (GK)", "GK", 1],
                     ["Prayag Babu", "DEF", 3],
@@ -781,7 +795,7 @@
                 ]
             },
             AVL: {
-                name: "Aston Villa", c: "#9333ea", logo: "public/astonvilla.png", mgr: { name: "Sinan", photo: "" },
+                name: "Aston Villa", c: "#9333ea", logo: "public/astonvilla.png", ar: 0.6996, round: false, mgr: { name: "Sinan", photo: "" },
                 pl: [
                     ["Yedhukrishna (GK)", "GK", 1],
                     ["Abdu", "DEF", 3],
@@ -855,13 +869,17 @@
         /* ============ APP LOGIC ============ */
         const $ = s => document.querySelector(s), app = $("#app");
         const done = m => m.hs != null;
+        /* Crests render at their own silhouette - nothing is clipped to a circle.
+           `--ar` makes the box the badge's exact shape so `contain` fills it, and
+           only a non-round badge gets the black plate; a round one is clean on its
+           own. Falls back to the team initials on the team colour if a logo is
+           missing. */
         const cr = (id, l) => {
             const t = TEAMS[id];
-            /* `contain` keeps each crest's aspect ratio (Spurs' shield is very tall) and
-               the team colour stays as the backdrop behind transparent areas. */
-            return t.logo
-                ? `<span class="cr ${l ? "l" : ""}" style="background:${t.c} center/contain no-repeat url(${t.logo})"></span>`
-                : `<span class="cr ${l ? "l" : ""}" style="background:${t.c}">${id}</span>`
+            const st = t.logo
+                ? `--ar:${t.ar};--cr-img:url(${t.logo});--cr-bg:${t.round ? "transparent" : "#000"};--cr-r:${t.round ? 0 : 6}px`
+                : `--ar:1.6;--cr-bg:${t.c};--cr-r:6px`;
+            return `<span class="cr${l ? " l" : ""}" style="${st}">${t.logo ? "" : id}</span>`
         };
         const ini = n => n.split(" ").map(w => w[0]).join("").slice(0, 2);
         const av = (n, p, c) => `<div class="av ${c || ""}" style="${p ? `background-image:url(${p})` : ""}">${p ? "" : ini(n)}</div>`;
